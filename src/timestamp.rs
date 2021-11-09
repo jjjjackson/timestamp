@@ -1,13 +1,18 @@
-use std::ops::Index;
+use std::{
+    fmt,
+    ops::Index,
+    time::{Duration, SystemTime},
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct TimeStamp {
-    year: i64,
-    month: i64,
-    day: i64,
-    hour: i64,
-    minute: i64,
-    second: i64,
+    year:        i64,
+    month:       i64,
+    day:         i64,
+    hour:        i64,
+    minute:      i64,
+    second:      i64,
+    millisecond: i64,
 }
 
 const BASE_YEAR: i64 = 2000; // 1970/1/1 ~ 2000/1/1
@@ -23,27 +28,40 @@ const SECONDS_PER_HOUR: i64 = 3600; // 60 * 60
 const SECONDS_PER_MINUTE: i64 = 60;
 
 impl TimeStamp {
-    // fn now() -> TimeStamp {
-    //     let sys_time = SystemTime::now();
-    //     return TimeStamp::to_timestamp(sys_time);
-    // }
+    fn now() -> TimeStamp {
+        let sys_time = SystemTime::now();
+        let total_seconds_from_unix_time = sys_time
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_or(Duration::ZERO, |f| f)
+            .as_secs() as i64;
 
-    fn to_timestamp(total_seconds_from_unix_time: i64) -> TimeStamp {
-        // let total_seconds_from_unix_time = sys_time
-        //     .duration_since(SystemTime::UNIX_EPOCH)
-        //     .map_or(
-        //         Duration::ZERO,
-        //     |f|f
-        //     ).as_secs() as i64;
+        let milliseconds = total_seconds_from_unix_time as u128 * 1000000
+            - sys_time
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(Duration::ZERO, |f| f)
+                .as_micros();
 
-        let mut total_days_from_unix_time = total_seconds_from_unix_time / SECONDS_PER_DAY;
-        let mut remained_seconds = total_seconds_from_unix_time % SECONDS_PER_DAY;
+        return TimeStamp::to_datetime(
+            total_seconds_from_unix_time,
+            milliseconds as i64,
+        );
+    }
+
+    fn to_datetime(
+        total_seconds_from_unix_time: i64,
+        current_millisecond: i64,
+    ) -> TimeStamp {
+        let mut total_days_from_unix_time =
+            total_seconds_from_unix_time / SECONDS_PER_DAY;
+        let mut remained_seconds =
+            total_seconds_from_unix_time % SECONDS_PER_DAY;
         if remained_seconds < 0 {
             total_days_from_unix_time -= 1;
             remained_seconds += SECONDS_PER_DAY;
         }
 
-        let mut days = total_days_from_unix_time - DAYS_FROM_UNIX_TIME_TO_BASE_YEAR;
+        let mut days =
+            total_days_from_unix_time - DAYS_FROM_UNIX_TIME_TO_BASE_YEAR;
 
         let mut quad_century_cycles: i64 = days / DAYS_PER_400Y;
         days = days % DAYS_PER_400Y;
@@ -71,7 +89,9 @@ impl TimeStamp {
         days -= remained_years * DAYS_PER_Y;
 
         let is_this_year_a_leap_year = remained_years == 0
-            && (quad_cycles != 0 || century_cycles == 0 || quad_century_cycles != 0);
+            && (quad_cycles != 0
+                || century_cycles == 0
+                || quad_century_cycles != 0);
 
         let mut remained_days = days + is_this_year_a_leap_year as i64;
 
@@ -87,15 +107,20 @@ impl TimeStamp {
 
         let mut current_month: i64 = 0;
         for i in 1..13 {
-            if TimeStamp::get_days_from_jan(i, is_this_year_a_leap_year) >= remained_days {
+            if TimeStamp::get_days_from_jan(i, is_this_year_a_leap_year)
+                >= remained_days
+            {
                 current_month = i;
                 break;
             }
         }
 
         let previous_month = current_month - 1;
-        let current_day =
-            remained_days - TimeStamp::get_days_from_jan(previous_month, is_this_year_a_leap_year);
+        let current_day = remained_days
+            - TimeStamp::get_days_from_jan(
+                previous_month,
+                is_this_year_a_leap_year,
+            );
 
         let current_hour = remained_seconds / SECONDS_PER_HOUR;
         let remained_seconds = remained_seconds % SECONDS_PER_HOUR;
@@ -103,12 +128,13 @@ impl TimeStamp {
         let current_second = remained_seconds % SECONDS_PER_MINUTE;
 
         return TimeStamp {
-            year: current_year,
-            month: current_month,
-            day: current_day,
-            hour: current_hour,
-            minute: current_minute,
-            second: current_second,
+            year:        current_year,
+            month:       current_month,
+            day:         current_day,
+            hour:        current_hour,
+            minute:      current_minute,
+            second:      current_second,
+            millisecond: current_millisecond,
         };
     }
 
@@ -121,6 +147,23 @@ impl TimeStamp {
     }
 }
 
+impl fmt::Display for TimeStamp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Use `self.number` to refer to each positional data point.
+        write!(
+            f,
+            "{}-{}-{}T{}:{}:{}.{}Z",
+            self.year,
+            self.month,
+            self.day,
+            self.hour,
+            self.minute,
+            self.second,
+            self.millisecond
+        )
+    }
+}
+
 #[cfg(test)]
 extern crate test_case;
 
@@ -129,20 +172,29 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(-11670912000,  TimeStamp{ year: 1600, month: 3, day: 1, hour: 0, minute: 0, second: 0}  ; "1600/03/01 0:0:0")]
-    #[test_case(-2203891200,  TimeStamp{ year: 1900, month: 3, day: 1, hour: 0, minute: 0, second: 0}  ; "1900/03/01 0:0:0")]
-    #[test_case(-2077660800,  TimeStamp{ year: 1904, month: 3, day: 1, hour: 0, minute: 0, second: 0}  ; "1904/03/01 0:0:0")]
-    #[test_case(983318400,  TimeStamp{ year: 2001, month: 2, day: 28, hour: 0, minute: 0, second: 0}  ; "2001/02/28 0:0:0")]
-    #[test_case(983404800,  TimeStamp{ year: 2001, month: 3, day: 1, hour: 0, minute: 0, second: 0}  ; "2001/03/01 0:0:0")]
-    #[test_case(1078099200,  TimeStamp{ year: 2004, month: 3, day: 1, hour: 0, minute: 0, second: 0}  ; "2004/03/01 0:0:0")]
-    #[test_case(4107542400,  TimeStamp{ year: 2100, month: 3, day: 1, hour: 0, minute: 0, second: 0}  ; "2100/03/01 0:0:0")]
-    #[test_case(13569465600,  TimeStamp{ year: 2400, month: 1, day: 1, hour: 0, minute: 0, second: 0}  ; "2400/01/01 0:0:0")]
-    #[test_case(13572057600,  TimeStamp{ year: 2400, month: 1, day: 31, hour: 0, minute: 0, second: 0}  ; "2400/01/31 0:0:0")]
-    #[test_case(13574563200,  TimeStamp{ year: 2400, month: 2, day: 29, hour: 0, minute: 0, second: 0}  ; "2400/02/29 0:0:0")]
-    #[test_case(13574649600,  TimeStamp{ year: 2400, month: 3, day: 1, hour: 0, minute: 0, second: 0}  ; "2400/03/01 0:0:0")]
-    fn test_to_timestamp(total_seconds_from_unix_time: i64, expected: TimeStamp) {
-        let got = TimeStamp::to_timestamp(total_seconds_from_unix_time);
+    #[test_case(-11670912000,  TimeStamp{ year: 1600, month: 3, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "1600/03/01 0:0:0")]
+    #[test_case(-2203891200,  TimeStamp{ year: 1900, month: 3, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "1900/03/01 0:0:0")]
+    #[test_case(-2077660800,  TimeStamp{ year: 1904, month: 3, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "1904/03/01 0:0:0")]
+    #[test_case(983318400,  TimeStamp{ year: 2001, month: 2, day: 28, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2001/02/28 0:0:0")]
+    #[test_case(983404800,  TimeStamp{ year: 2001, month: 3, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2001/03/01 0:0:0")]
+    #[test_case(1078099200,  TimeStamp{ year: 2004, month: 3, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2004/03/01 0:0:0")]
+    #[test_case(4107542400,  TimeStamp{ year: 2100, month: 3, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2100/03/01 0:0:0")]
+    #[test_case(13569465600,  TimeStamp{ year: 2400, month: 1, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2400/01/01 0:0:0")]
+    #[test_case(13572057600,  TimeStamp{ year: 2400, month: 1, day: 31, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2400/01/31 0:0:0")]
+    #[test_case(13574563200,  TimeStamp{ year: 2400, month: 2, day: 29, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2400/02/29 0:0:0")]
+    #[test_case(13574649600,  TimeStamp{ year: 2400, month: 3, day: 1, hour: 0, minute: 0, second: 0, millisecond: 0}  ; "2400/03/01 0:0:0")]
+    fn test_to_timestamp(
+        total_seconds_from_unix_time: i64,
+        expected: TimeStamp,
+    ) {
+        let got = TimeStamp::to_datetime(total_seconds_from_unix_time, 0);
 
         assert_eq!(expected, got);
+    }
+
+    #[test]
+    fn test_now() {
+        let got = TimeStamp::now();
+        // assert_eq!(expected, got);
     }
 }
